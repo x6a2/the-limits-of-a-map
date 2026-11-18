@@ -1,0 +1,30 @@
+# 截图用的临时浏览器 profile（几十 MB，不入库）
+shots/_profile/
+shots/_profile2/
+shots/t1.png
+shots/crop-*.png
+shots/report.json
+shots/q*.js
+
+# 一次性构建产物 / 依赖
+node_modules/
+package-lock.json
+__pycache__/
+*.pyc
+
+# 原始底图（3 MB，用 README 里的链接自行下载）
+tools/ne_50m_admin_0_countries.geojson
+
+# 一次性的改造脚本，不属于成品
+tools/patch*.py
+tools/patchfacts.py
+tools/explore.py
+
+# 任务说明稿（不入库）
+demo-blueprint.md
+kickoff-prompt.md
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini

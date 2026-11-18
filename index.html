@@ -1,0 +1,1503 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一张地图的极限</title>
+<style>
+  :root{
+    --bg:#F6F2EA;
+    --ink:#1C1A17;
+    --muted:#6B6257;
+    --accent:#B23A2E;
+    --accent2:#2F4858;
+    --empty:#DED5C7;
+    --rule:rgba(28,26,23,.14);
+    --rule-soft:rgba(28,26,23,.08);
+    --serif:"Noto Serif SC","Source Han Serif SC","Songti SC","SimSun",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{overflow-x:clip;scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:17px;line-height:1.78;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    overflow-x:clip;
+  }
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:.005em;margin:0}
+  p{margin:0 0 1.05em}
+  strong{font-weight:600}
+  .num,figcaption,.figure__n,.axis,.tip,.legend,.kpi__v{font-variant-numeric:tabular-nums}
+
+  .wrap{width:min(680px,100% - 64px);margin-inline:auto}
+  .wide{width:min(1180px,100% - 64px);margin-inline:auto}
+
+  /* ---------- 顶部进度 ---------- */
+  .progress{position:fixed;left:0;top:0;height:2px;width:100%;z-index:60;pointer-events:none}
+  .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .12s linear}
+
+  /* ---------- 幕标签 ---------- */
+  .actmark{
+    position:fixed;right:28px;top:22px;z-index:55;
+    font-size:11px;letter-spacing:.18em;color:var(--muted);
+    font-variant-numeric:tabular-nums;text-transform:uppercase;
+    opacity:0;transition:opacity .4s ease;pointer-events:none;
+    padding:6px 0 6px 30px;
+    background:linear-gradient(90deg,rgba(246,242,234,0) 0%,rgba(246,242,234,.92) 30%,#F6F2EA 100%);
+  }
+  .actmark.on{opacity:.75}
+
+  /* ---------- 开场 ---------- */
+  .hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:84px 0 46px;position:relative}
+  .kicker{font-size:12px;letter-spacing:.16em;color:var(--muted);margin-bottom:28px;text-transform:uppercase}
+  h1{font-size:clamp(46px,5.6vw,84px);line-height:1.08;letter-spacing:-.01em}
+  .lede{margin-top:32px;font-size:clamp(17px,1.35vw,19px);color:#3A342C;max-width:34em}
+  .lede span{color:var(--muted)}
+
+  .grain{margin-top:22px}
+  .grain__h{font-size:10.5px;letter-spacing:.12em;color:var(--muted);margin-bottom:8px;text-transform:uppercase}
+  #grainSvg{display:block;width:100%;height:24px}
+  .grain__cap{font-size:10.5px;color:var(--muted);margin-top:7px;letter-spacing:.02em}
+  .figures{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    margin-top:50px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  .figure{padding:24px 22px 22px;border-left:1px solid var(--rule-soft)}
+  .figure:first-child{border-left:0;padding-left:0}
+  .figure__n{font-size:clamp(26px,2.5vw,36px);line-height:1.15;letter-spacing:-.02em;display:block;min-height:1.2em}
+  .figure__l{font-size:13px;color:var(--muted);margin-top:8px;display:block}
+  .figure__note{font-size:11.5px;color:var(--muted);opacity:.85;margin-top:10px;line-height:1.5;display:block}
+
+  .hint{margin-top:44px;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+  .hint::after{content:"";display:block;width:1px;height:34px;background:var(--rule);margin-top:14px}
+
+  /* ---------- 幕容器 ---------- */
+  .act{padding:150px 0 130px;min-height:120vh;display:flex;flex-direction:column;justify-content:center}
+  .eyebrow{font-size:11.5px;letter-spacing:.16em;color:var(--accent);margin-bottom:20px;text-transform:uppercase}
+  h2{font-size:clamp(28px,3.1vw,42px);line-height:1.25;margin-bottom:26px;letter-spacing:-.005em}
+  .act .body{color:#2A251F}
+  .reveal{
+    margin-top:28px;padding-top:18px;border-top:1px solid var(--rule);
+    font-size:14.5px;color:var(--muted);line-height:1.9;
+  }
+  .reveal b{color:var(--ink);font-weight:600}
+  .mini{font-size:12.5px;color:var(--muted);line-height:1.7;margin-top:18px}
+
+  /* ---------- 幕 1-3：粘性地图 ---------- */
+  .story{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(340px,1fr);align-items:start}
+  .story__viz{position:sticky;top:0;height:100vh;overflow:hidden}
+  .story__steps{display:flex;flex-direction:column}
+  .step{min-height:120vh;display:flex;align-items:center;padding:110px 56px 110px 8px}
+  .step__inner{max-width:400px}
+
+  #map{display:block;width:100%;height:100%}
+  .cpath{stroke:#FBF7EF;stroke-width:.6;cursor:default;transition:opacity .5s ease}
+  .cpath.hot{cursor:pointer}
+  .ctx{fill:#EBE4D6;stroke:#FBF7EF;stroke-width:.4;pointer-events:none}
+  .bub{stroke:#FBF7EF;stroke-width:1;cursor:pointer}
+  .blabel{font-size:11px;fill:var(--ink);pointer-events:none;font-variant-numeric:tabular-nums}
+  .blabel--muted{fill:var(--muted)}
+
+  .viz-head{position:absolute;left:36px;top:26px;z-index:4;pointer-events:none}
+  .viz-head .k{font-size:10.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+  .viz-head .t{font-size:13px;color:var(--ink);margin-top:6px;font-family:var(--serif)}
+  .legend{margin-top:14px;width:216px;opacity:0;transition:opacity .4s ease}
+  .legend.on{opacity:1}
+  .legend .bar{height:5px;width:100%;border-radius:0}
+  .legend .lab{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:5px}
+  .legend .cap{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .sleg{display:grid;grid-template-columns:22px 1fr auto;gap:7px;align-items:center;font-size:11px;color:var(--muted);line-height:1.7}
+  .sleg .v{font-variant-numeric:tabular-nums}
+
+  .viz-foot{position:absolute;left:36px;bottom:26px;z-index:4;font-size:11px;color:var(--muted);letter-spacing:.04em;pointer-events:none}
+
+  .rest{
+    width:100%;max-width:340px;margin-top:26px;padding:14px 16px 12px;
+    border:1px solid var(--rule);background:rgba(251,247,239,.6);
+    opacity:0;transform:translateY(6px);transition:opacity .5s ease,transform .5s ease;
+  }
+  .rest.on{opacity:1;transform:none}
+  .rest h4{margin:0 0 5px;font-size:10.5px;letter-spacing:.16em;color:var(--muted);font-weight:500;text-transform:uppercase}
+  .rest__k{font-size:11px;color:var(--muted);margin-bottom:9px}
+  .rest__k b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;font-size:13px}
+  .rest__stack{display:flex;gap:2px;height:24px;margin-bottom:10px}
+  .rest__stack i{display:block;height:100%;min-width:2px}
+  .rest__leg{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
+  .rest__item{display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.7}
+  .rest__item b{width:6px;height:6px;flex:none}
+  .rest__item span:nth-child(2){color:#2A251F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rest__item span:last-child{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* 抽屉 */
+  .drawer{
+    position:absolute;right:0;top:0;bottom:0;width:min(360px,86%);z-index:6;
+    background:#FBF7EF;border-left:1px solid var(--rule);
+    padding:24px 24px 20px;overflow:auto;
+    transform:translateX(103%);visibility:hidden;
+    transition:transform .55s cubic-bezier(.22,.8,.24,1),visibility .55s step-end;
+  }
+  .drawer.on{transform:none;visibility:visible;box-shadow:-18px 0 40px -30px rgba(28,26,23,.5);
+    transition:transform .55s cubic-bezier(.22,.8,.24,1),visibility 0s}
+  .drawer .dx{font-size:10.5px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+  .drawer h3{font-size:22px;margin:4px 0 2px}
+  .drawer .sub{font-family:var(--sans);font-size:12px;color:var(--muted);margin-bottom:10px}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rule-soft);margin:10px 0 12px;border-top:1px solid var(--rule-soft);border-bottom:1px solid var(--rule-soft)}
+  .kpi{background:#FBF7EF;padding:7px 0}
+  .kpi__v{font-size:19px;line-height:1.3;letter-spacing:-.01em}
+  .kpi__l{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .crow{display:grid;grid-template-columns:58px 1fr auto;gap:8px;align-items:center;font-size:12px;padding:4.5px 0;border-bottom:1px dotted var(--rule)}
+  .crow .id{font-variant-numeric:tabular-nums;color:#2A251F}
+  .crow .bar{height:6px;background:var(--rule-soft);position:relative}
+  .crow .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.7;min-width:2px}
+  .crow .v{font-variant-numeric:tabular-nums;color:var(--muted);text-align:right;min-width:62px}
+  .drawer .foot{font-size:10.5px;color:var(--muted);margin-top:10px;line-height:1.5}
+
+  /* 抽屉：客户 × 时间 */
+  #dxTime{width:100%;height:104px;display:block;overflow:visible}
+  .dxconc{margin-top:12px;padding-top:11px;border-top:1px solid var(--rule-soft)}
+  .dxconc__h{font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:7px}
+  .dxconc__track{height:8px;background:#E9E1D3;position:relative}
+  .dxconc__track i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.85}
+  .dxconc__track b{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--ink);opacity:.55}
+  .dxconc__k{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:7px}
+  .crow .id i{display:inline-block;width:7px;height:7px;margin-right:5px;vertical-align:baseline}
+
+  /* 第 4 幕 热力图 */
+  #heat{width:100%;display:block;overflow:visible}
+  .heat__lab{font-size:11.5px;fill:#2A251F}
+  .heat__key{font-size:10px;fill:#6B6257}
+  .h3b{font-size:21px;line-height:1.4;margin:0 0 10px;letter-spacing:-.01em;font-weight:600}
+  .sub4{max-width:680px;font-size:16px;line-height:1.85;color:#3A342C;margin:0 0 26px}
+
+  /* ---------- 图卡 ---------- */
+  .chart{width:100%;display:block;overflow:visible}
+  #map{overflow:hidden}
+  .axis text{font-size:11px;fill:var(--muted)}
+  .axis path,.axis line{stroke:var(--rule-soft);fill:none}
+  .glabel{font-size:11px;fill:var(--muted)}
+  .ann{font-size:11.5px;fill:var(--ink);font-variant-numeric:tabular-nums}
+  .ann--muted{fill:var(--muted)}
+  .tip{
+    position:fixed;z-index:80;pointer-events:none;background:#1C1A17;color:#F6F2EA;
+    padding:7px 10px;font-size:11.5px;line-height:1.5;opacity:0;transition:opacity .12s;
+    transform:translate(-50%,-118%);white-space:nowrap;
+  }
+  .tip.on{opacity:1}
+
+  .chartwrap{border-top:1px solid var(--rule);padding-top:18px;margin-top:36px}
+
+  /* 第 5 幕 三卡 */
+  .fails{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:46px}
+  .fail{border-top:2px solid var(--ink);padding-top:14px}
+  .fail .n{font-size:11px;letter-spacing:.14em;color:var(--accent);margin-bottom:8px}
+  .fail h3{font-size:19px;margin-bottom:8px}
+  .fail p{font-size:13px;color:var(--muted);line-height:1.7;margin:10px 0 0}
+  .fail .chartbox{margin-top:14px;height:210px}
+  #failArea{overflow:hidden}
+
+  .turn{margin-top:96px;border-top:1px solid var(--rule);padding-top:44px}
+  .turn .lead{font-family:var(--serif);font-size:clamp(22px,2.2vw,30px);line-height:1.5;max-width:22em;margin-bottom:8px}
+
+  /* 5.5 */
+  .honest{margin-top:40px;border-top:1px solid var(--rule)}
+  .honest__row{display:grid;grid-template-columns:152px 1fr 196px;gap:16px;align-items:center;
+    padding:13px 0;border-bottom:1px solid var(--rule-soft)}
+  .honest__lab{font-size:13.5px;line-height:1.45}
+  .honest__track{height:9px;background:#E9E1D3;position:relative}
+  .honest__track i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);opacity:.88;min-width:2px}
+  .honest__val{text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1.4}
+  .honest__val b{display:block;color:var(--ink);font-weight:500;font-size:13px;margin-bottom:2px;letter-spacing:-.01em}
+
+  .closing{padding:30px 0 30px;text-align:center}
+  .closing p{font-family:var(--serif);font-weight:600;font-size:clamp(19px,1.85vw,24px);
+    line-height:1.85;letter-spacing:.01em;color:var(--ink);max-width:24em;margin:0 auto}
+  .closing p span{color:var(--muted)}
+  footer{padding:66px 0 62px;border-top:1px solid var(--rule);margin-top:76px}
+  footer code{font-size:11px;background:rgba(28,26,23,.05);padding:1px 5px}
+  .colophon{display:grid;grid-template-columns:repeat(3,1fr);gap:0 46px}
+  .colophon h5{margin:0 0 13px;font-size:10.5px;letter-spacing:.16em;color:var(--muted);
+    font-weight:500;text-transform:uppercase}
+  .colophon h5 em{font-style:normal;color:var(--accent);margin-right:7px}
+  .colophon p{margin:0;font-size:12px;line-height:1.95;color:var(--muted)}
+  .colophon p b{color:var(--ink);font-weight:500}
+  .colophon p + p{margin-top:9px}
+  .colophon__foot{margin:40px 0 0;padding-top:18px;border-top:1px solid var(--rule-soft);
+    font-size:11px;line-height:1.8;color:var(--muted)}
+  @media (max-width:900px){ .colophon{grid-template-columns:1fr;gap:26px} }
+
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  @media (max-width:1100px){
+    .story{grid-template-columns:1fr}
+    .story__viz{position:relative;height:72vh;top:auto}
+    .step{min-height:auto;padding:70px 0}
+    .step__inner{max-width:640px}
+    .fails{grid-template-columns:1fr}
+    .honest__row{grid-template-columns:112px 1fr 124px;gap:10px}
+    .honest__val{font-size:10.5px}
+    .figures{grid-template-columns:1fr 1fr}
+    .figure{padding-left:22px}
+    .figure:nth-child(odd){border-left:0;padding-left:0}
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    *{transition-duration:.001ms !important;animation-duration:.001ms !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="progress"><i id="pbar"></i></div>
+<div class="actmark" id="actmark">01 / 06</div>
+<div class="tip" id="tip"></div>
+
+<!-- ============ 第 0 幕 ============ -->
+<header class="hero" id="act0">
+  <div class="wrap">
+    <p class="kicker">Online Retail II · 2009.12 — 2011.12</p>
+    <h1>一张地图<br>的极限</h1>
+    <p class="lede">一家真实的英国批发商，两年里开出的每一张发票。
+      同一份数据，我们画了六次——每一次都更接近真相，也更接近这张地图装不下的地方。</p>
+  </div>
+
+  <div class="wide">
+    <div class="figures">
+      <div class="figure">
+        <span class="figure__n" id="figRows" data-fact="rows">—</span>
+        <span class="figure__l">去重后的行数</span>
+        <span class="figure__note" id="figRowsNote"></span>
+      </div>
+      <div class="figure">
+        <span class="figure__n" id="figCountries" data-fact="country_values">—</span>
+        <span class="figure__l">个“国家”</span>
+        <span class="figure__note" id="figCountriesNote"></span>
+      </div>
+      <div class="figure">
+        <span class="figure__n" id="figMonths" data-fact="months">—</span>
+        <span class="figure__l">个完整自然月</span>
+        <span class="figure__note">2011 年 12 月只有 9 天，计总额、不进月度曲线</span>
+      </div>
+      <div class="figure">
+        <span class="figure__n" id="figRevenue" data-fact="revenue">—</span>
+        <span class="figure__l">有效销售额</span>
+        <span class="figure__note">剔除取消单、退货与零价行之后</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wide">
+    <div class="grain">
+      <div class="grain__h">两年的每一天 · 逐日有效销售额</div>
+      <svg id="grainSvg" role="img" aria-label="2009 年 12 月到 2011 年 12 月，每一天的有效销售额"></svg>
+      <p class="grain__cap" id="grainCap"></p>
+    </div>
+  </div>
+
+  <div class="wrap"><p class="hint">往下滚</p></div>
+</header>
+
+<!-- ============ 第 1-3 幕 ============ -->
+<div class="story" id="story">
+  <div class="story__viz" id="viz">
+    <div class="viz-head">
+      <div class="k" id="vizK">Encoding 01 · Choropleth</div>
+      <div class="t" id="vizT">欧洲 22 国 · 按营收涂色</div>
+      <div class="legend" id="legend">
+        <div id="legendGrad">
+          <div class="bar" id="legendBar"></div>
+          <div class="lab"><span id="legendLo">—</span><span id="legendHi">—</span></div>
+        </div>
+        <div id="legendSize" hidden></div>
+        <div class="cap" id="legendCap">—</div>
+      </div>
+    </div>
+    <svg id="map" role="img" aria-label="欧洲各国营收地图"></svg>
+    <div class="viz-foot" id="vizFoot">同一组数据 · 同一块国界</div>
+
+    <aside class="drawer" id="drawer" aria-hidden="true">
+      <div class="dx">Country detail</div>
+      <h3 id="dxTitle">爱尔兰</h3>
+      <div class="sub" id="dxSub">Ireland</div>
+      <div class="kpis">
+        <div class="kpi"><div class="kpi__v" id="dxRev">—</div><div class="kpi__l">有效销售额</div></div>
+        <div class="kpi"><div class="kpi__v" id="dxCust">—</div><div class="kpi__l">可识别客户</div></div>
+        <div class="kpi"><div class="kpi__v" id="dxOrd">—</div><div class="kpi__l">有效发票</div></div>
+        <div class="kpi"><div class="kpi__v" id="dxPer">—</div><div class="kpi__l">每客户营收</div></div>
+      </div>
+      <div class="dx" style="margin-bottom:6px">这 5 个客户</div>
+      <div id="dxRows"></div>
+      <div class="dx" style="margin:12px 0 2px">同一个 24 个月，还是这 5 个人</div>
+      <svg id="dxTime" role="img" aria-label="爱尔兰五个客户的逐月营收，叠加成国家月度总额"></svg>
+      <div class="foot" id="dxFoot"></div>
+      <div class="dxconc" id="dxConc"></div>
+    </aside>
+  </div>
+
+  <div class="story__steps">
+    <section class="step" id="act1" data-act="1">
+      <div class="step__inner">
+        <p class="eyebrow">第 1 幕 · 按营收涂色</p>
+        <h2>看起来，我们只卖给了一个国家。</h2>
+        <p class="body">欧洲 <span data-fact="europe_countries">—</span> 个国家，颜色越深表示营收越高。英国之外，
+          整块大陆几乎是同一片米白——它没有说假话，只是把 <span data-fact="non_uk_share">—</span> 的生意，画成了背景。</p>
+        <div class="reveal">
+          英国 <b data-fact="uk_share">—</b>。剩下 <span data-fact="rest_values">—</span> 个取值，分其余部分。
+          <br><span id="act1cap"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="act2" data-act="2">
+      <div class="step__inner">
+        <p class="eyebrow">第 2 幕 · 换成气泡</p>
+        <h2>面积会骗人。</h2>
+        <p class="body">同一组数字，同一块国界。只把“涂色”换成“面积正比于营收”的圆，
+          英国就从一整块红，缩回一个和邻居可比的圆。</p>
+        <div class="reveal">
+          荷兰 <b data-fact="nl_share">—</b>、德国 <b data-fact="de_share">—</b>、法国 <b data-fact="fr_share">—</b> 是真实生意。
+          <br>瑞士和爱尔兰在地图上小到看不清，营收却都排在前十。
+          <br><span id="act2cap"></span>
+        </div>
+        <div class="rest" id="rest">
+          <h4>世界其余 · 欧洲以外</h4>
+          <div class="rest__k">全部营收的 <b id="restShare">—</b>，分成这些块</div>
+          <div class="rest__stack" id="restStack"></div>
+          <div class="rest__leg" id="restRows"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="act3" data-act="3">
+      <div class="step__inner">
+        <p class="eyebrow">第 3 幕 · 点开爱尔兰</p>
+        <h2>一个国家的热度，可能是五个人的热度。</h2>
+        <p class="body">爱尔兰排第二，<span class="num" data-fact="ie_revenue">—</span>。
+          点开它，抽屉里只有五个客户 ID。</p>
+        <div class="reveal">
+          <b data-fact="ie_customers">—</b> 个可识别客户 · <b data-fact="ie_orders">—</b> 张有效发票（含取消单共 <span data-fact="ie_invoices_all">—</span> 张）。
+          <br>前两名客户占爱尔兰 <b id="act3top2">—</b>。
+        </div>
+        <p class="mini" id="act3conc"></p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ 第 4 幕 ============ -->
+<section class="act" id="act4">
+  <div class="wrap">
+    <p class="eyebrow">第 4 幕 · 二十四个月</p>
+    <h2>季节的波动，比国家之间的差异大一个量级。</h2>
+    <p class="body">把镜头从地图挪到时间轴：<span class="num" id="a4months">—</span> 个完整自然月，峰值在 <span id="a4peakM">—</span>，
+      谷值在 <span id="a4troughM">—</span>，相差 <b id="a4amp">—</b>。</p>
+  </div>
+  <div class="wide">
+    <div class="chartwrap"><svg class="chart" id="lineChart" role="img" aria-label="24 个月营收折线"></svg></div>
+    <div class="reveal" style="max-width:680px">
+      <span id="a4note">—</span>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:66px">
+    <h3 class="h3b">同一个 24 个月，十二个国家各自的样子</h3>
+    <p class="sub4">每一行都除以它自己的 24 月均值，所以每一行只能和自己的过去比：深色＝那个月远低于自己的平均线，
+      红＝远高于。按“自身波动”从低到高排：英国的格子始终在中间色调，它跌不深也涨不猛；
+      越往下越花——那些国家的“一个月”，往往就是一张单。</p>
+    <p class="mini" id="heatNote" style="max-width:680px;margin-top:-8px"></p>
+  </div>
+  <div class="wide">
+    <div class="chartwrap"><svg class="chart" id="heat" role="img" aria-label="十二个国家二十四个月的自身基线热力图"></svg></div>
+  </div>
+</section>
+
+<!-- ============ 第 5 幕 ============ -->
+<section class="act" id="act5">
+  <div class="wrap">
+    <p class="eyebrow">第 5 幕 · 三种失败</p>
+    <h2>一张地图能犯的三种错。</h2>
+    <p class="body">前四幕里，每一次换图都在换一种说法。三种最常见的画法，各自会骗在哪里——</p>
+  </div>
+
+  <div class="wide">
+    <div class="fails">
+      <div class="fail">
+        <div class="n">失败 01</div>
+        <h3>绝对额涂色</h3>
+        <svg class="chart chartbox" id="failAbs" role="img" aria-label="绝对额条形图"></svg>
+        <p>它最后总会长成一张规模图：最大者恒亮，其余全部压平。你看到的不是分布，是排序的第 1 名。</p>
+      </div>
+      <div class="fail">
+        <div class="n">失败 02</div>
+        <h3>面积即权重</h3>
+        <svg class="chart chartbox" id="failArea" role="img" aria-label="按国土面积着色的地图"></svg>
+        <p id="failAreaCap">地图的底子是国土面积：法国分到 — 的像素，爱尔兰只有 —；可爱尔兰的营收是法国的 — 倍。</p>
+      </div>
+      <div class="fail">
+        <div class="n">失败 03</div>
+        <h3>变化率涂色</h3>
+        <svg class="chart chartbox" id="failDelta" role="img" aria-label="小样本国家月度波动"></svg>
+        <p id="failDeltaCap">小样本的环比全是噪声：3 单变 6 单就是 +100%。颜色最亮的地方，往往只是发票最少的地方。</p>
+      </div>
+    </div>
+
+    <div class="turn">
+      <div class="wrap" style="width:min(760px,100%);margin-left:0">
+        <p class="eyebrow">换一个问题</p>
+        <p class="lead">所以正确做法不是换一种颜色，而是换一个问题：每个区域跟自己的基线比，带上置信度，并且能一路下钻到客户。</p>
+        <p class="body" id="turnBody">以爱尔兰为例。把它 <span class="num" id="turnMonths">24</span> 个月的营收和自己的月均基线放在一起——</p>
+      </div>
+      <div class="chartwrap"><svg class="chart" id="baseChart" role="img" aria-label="爱尔兰月度营收与自身基线"></svg></div>
+      <div class="reveal" style="max-width:720px" id="turnNote">—</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 第 5.5 幕 ============ -->
+<section class="act" id="act55" style="min-height:100vh;display:flex;flex-direction:column;justify-content:center">
+  <div class="wrap">
+    <p class="eyebrow">第 5.5 幕 · 数据的诚实话</p>
+    <h2>四个必须先说清楚的前提。</h2>
+    <p class="body">这一屏多数作品不放。不放，前面五幕就都站不住。</p>
+  </div>
+  <div class="wide">
+    <div class="honest" id="honest"></div>
+    <p class="mini" id="honestNote"></p>
+  </div>
+</section>
+
+<section class="closing">
+  <p>同一份数据，六次换图，<br>每一次都只说了真话的一部分<span><br>包括这一次。</span></p>
+</section>
+
+<footer>
+  <div class="wide">
+    <div class="colophon">
+      <div>
+        <h5><em>01</em>数据</h5>
+        <p><b>UCI Machine Learning Repository · Online Retail II</b>，一家英国注册的礼品批发商，
+          <span class="num" data-fact="date_min">—</span> 至 <span class="num" data-fact="date_max">—</span>。</p>
+        <p>原始 <span class="num" data-fact="rows_raw">—</span> 行，分两个年度 sheet；两份在 2010-12-01 至 09
+          重叠 9 天，按 <code>Invoice + StockCode + Quantity + InvoiceDate + Price</code> 去重，去掉
+          <span class="num" data-fact="rows_removed">—</span> 行，余 <span class="num" data-fact="rows">—</span> 行。</p>
+      </div>
+      <div>
+        <h5><em>02</em>口径</h5>
+        <p>营收（正文里也叫“有效销售额”，同一个东西）= 非取消单、非退货、价格大于 0 的 <code>Quantity × Price</code>。发票数 = 同一口径下的唯一
+          Invoice；客户数只含填了 Customer ID 的行，所以“每客户”的分母比“每张发票”小一圈。</p>
+        <p>三个口径同时成立时总额才是 <span class="num" data-fact="revenue">—</span>；换任何一个口径，
+          前面每一屏的数字都会跟着变。</p>
+      </div>
+      <div>
+        <h5><em>03</em>边界</h5>
+        <p>这是一份历史批量数据，按批次结算，没有逐笔事件流。数据里只有国家字段，所以下钻到客户就到底。</p>
+        <p>国界底图来自 Natural Earth 1:50m（公共领域），仅覆盖欧洲
+          <span class="num" data-fact="europe_countries">—</span> 国；未使用 GADM。</p>
+      </div>
+    </div>
+    <p class="colophon__foot">所有数字由 <code>build_data.py</code> 生成并写入 <code>data/facts.md</code>，
+      页面从 <code>data/data.js</code> 读取，正文不手写数值。</p>
+  </div>
+</footer>
+
+<script src="assets/d3.v7.min.js"></script>
+<script src="assets/topojson-client.min.js"></script>
+<script src="data/data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.__DATA__;
+  var tipEl = document.getElementById("tip");
+  if (!D) {
+    document.body.insertAdjacentHTML("afterbegin",
+      '<p style="padding:40px;font:16px/1.7 sans-serif">数据未加载：请确认 data/data.js 与 assets/ 目录和本文件在同一层。</p>');
+    return;
+  }
+  var C = D.countries, M = D.monthly, K = D.concentration, F = D.facts;
+  var BY_ISO = {}; C.forEach(function (c) { if (c.iso) BY_ISO[c.iso] = c; });
+  var REDUCE = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var DUR = REDUCE ? 0 : 900;
+
+  var NF = new Intl.NumberFormat("en-US");
+  function n(v) { return NF.format(v); }
+  function money(v) { return "£" + NF.format(Math.round(v)); }
+  function money1(v) { return "£" + (v / 1e6).toFixed(2) + "M"; }
+  function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
+  var MO = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+  function mLabel(m) { return m.slice(0, 4) + "." + m.slice(5, 7); }
+  function mShort(m) { return m.slice(2, 4) + "." + m.slice(5, 7); }
+
+  /* ---------------- 顶部进度 ---------------- */
+  var pbar = document.getElementById("pbar");
+  var actmark = document.getElementById("actmark");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      pbar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+      actmark.classList.toggle("on", window.scrollY > window.innerHeight * 0.45);
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  /* ---------------- 第 0 幕 ---------------- */
+  function countUp(el, target, fmt, delay) {
+    if (REDUCE) { el.textContent = fmt(target); return; }
+    var t0 = performance.now() + (delay || 0), dur = 1100;
+    function step(t) {
+      var p = Math.min(1, Math.max(0, (t - t0) / dur));
+      var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(target * e);
+      if (p < 1) requestAnimationFrame(step);
+      else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+  }
+  document.getElementById("figRowsNote").textContent =
+    "原始 " + n(F.rows_raw) + " 行，去掉两 sheet 重叠的 " + n(F.rows_removed) + " 行";
+  document.getElementById("figCountriesNote").textContent =
+    "其中真实国家 " + n(F.real_countries) + " 个，另有 4 个不是国家";
+  var heroDone = false;
+  var heroIO = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting || heroDone) return;
+      heroDone = true;
+      countUp(document.getElementById("figRows"), F.rows, function (v) { return n(Math.round(v)); }, 0);
+      countUp(document.getElementById("figCountries"), F.country_values, function (v) { return n(Math.round(v)); }, 120);
+      countUp(document.getElementById("figMonths"), F.months, function (v) { return n(Math.round(v)); }, 240);
+      countUp(document.getElementById("figRevenue"), F.revenue, function (v) { return money(v); }, 360);
+      heroIO.disconnect();
+    });
+  }, { threshold: 0.25 });
+  heroIO.observe(document.querySelector(".figures"));
+
+  /* ---------------- 文案注入 ---------------- */
+  function setFact(sel, text) {
+    Array.prototype.forEach.call(document.querySelectorAll(sel), function (el) { el.textContent = text; });
+  }
+  setFact('[data-fact="uk_share"]', pct(F.uk_share, 2));
+  setFact('[data-fact="nl_share"]', pct(BY_ISO.NLD.revenue / F.revenue, 2));
+  setFact('[data-fact="de_share"]', pct(BY_ISO.DEU.revenue / F.revenue, 2));
+  setFact('[data-fact="fr_share"]', pct(BY_ISO.FRA.revenue / F.revenue, 2));
+  setFact('[data-fact="ie_revenue"]', money(F.ie_revenue));
+  setFact('[data-fact="ie_customers"]', n(F.ie_customers));
+  setFact('[data-fact="ie_orders"]', n(F.ie_orders));
+  setFact('[data-fact="ie_invoices_all"]', n(F.ie_invoices_all));
+  setFact('[data-fact="rows_raw"]', n(F.rows_raw));
+  setFact('[data-fact="rows_removed"]', n(F.rows_removed));
+  setFact('[data-fact="date_min"]', F.date_min.slice(0, 10));
+  setFact('[data-fact="date_max"]', F.date_max.slice(0, 10));
+  setFact('[data-fact="rows"]', n(F.rows));
+  setFact('[data-fact="revenue"]', money(F.revenue));
+  setFact('[data-fact="europe_countries"]', n(F.europe_countries));
+  setFact('[data-fact="non_uk_share"]', pct(1 - F.uk_share, 1));
+  setFact('[data-fact="rest_values"]', n(C.length - 1));
+
+  var ieTop2 = 0;
+  (F.ie_top_customers || []).slice(0, 2).forEach(function (c) { ieTop2 += c.share; });
+  document.getElementById("act3top2").textContent = pct(ieTop2, 1);
+  document.getElementById("act1cap").textContent =
+    "前 12 个取值合计 " + pct(F.top12_share, 2) + "；后 " + F.tail_count + " 个取值合计 " + pct(F.tail_share, 2) + "。";
+  var outside = 1 - F.europe_share;
+  var auShareOutside = BY_ISO.AUS.revenue / (F.revenue * outside);
+  document.getElementById("act2cap").textContent =
+    "欧洲以外全部加起来只有 " + pct(outside, 2) + "，其中澳大利亚一国占了 " + pct(auShareOutside, 0) + "。";
+  document.getElementById("act3conc").textContent =
+    "区域的热度，很多时候只是客户集中度的影子：同一个店铺的口径下，客户本来就是这么排布的。";
+  document.getElementById("dxConc").innerHTML =
+    '<div class="dxconc__h">全站 · ' + n(K.customers) + " 个可识别客户</div>" +
+    '<div class="dxconc__track"><i style="width:' + K.top10_share.toFixed(1) + '%"></i>' +
+      '<b style="left:' + K.top1_share.toFixed(1) + '%"></b></div>' +
+    '<div class="dxconc__k">前 10%（' + n(K.top10_customers) + " 人）贡献 " + K.top10_share.toFixed(1) +
+      "% 的营收；其中前 1%（" + n(K.top1_customers) + " 人）就占了 " + K.top1_share.toFixed(1) + "%。</div>";
+
+  /* ---------------- 地图 ---------------- */
+  var topo = D.europe;
+  var fc = topojson.feature(topo, topo.objects.countries);
+  var ctx = topojson.feature(topo, topo.objects.context);
+  var proj = d3.geoConicConformal().parallels([35, 65]).rotate([-10, 0]);
+  var geoPath = d3.geoPath(proj);
+  var svg = d3.select("#map");
+  var gRoot = svg.append("g");
+  var gCtx = gRoot.append("g");
+  var gCountries = gRoot.append("g");
+  var gBubbles = gRoot.append("g");
+  var gOverlay = svg.append("g");   // 不参与缩放，用来放固定字号的标注
+  var W = 1, H = 1;
+
+  // 亚速尔群岛（里斯本以西 1500km）会把投影的包围盒拉宽 5 度，把整块大陆挤到右边。
+  // 只保留经度 > -24.7 的多边形（冰岛最西 -24.5，亚速尔最东 -25.0）。
+  function dropFarWest(collection, lim) {
+    collection.features.forEach(function (f) {
+      var gm = f.geometry;
+      if (gm.type === "MultiPolygon") {
+        gm.coordinates = gm.coordinates.filter(function (poly) {
+          var b = d3.geoBounds({ type: "Polygon", coordinates: poly });
+          return b[0][0] > lim;
+        });
+      }
+    });
+  }
+  dropFarWest(fc, -24.7);
+  dropFarWest(ctx, -24.7);
+  fc.features.forEach(function (f) { f.__c = BY_ISO[f.properties.iso] || null; });
+  var dataFeatures = fc.features.filter(function (f) { return f.__c; });
+
+  var revs = C.map(function (c) { return c.revenue; });
+  var rMin = d3.min(revs), rMax = d3.max(revs);
+  var tScale = d3.scaleLog().domain([Math.max(1, rMin), rMax]).range([0, 1]);
+  var ramp = d3.scaleSequential(d3.interpolateRgbBasis(
+    ["#EFE7D8", "#E8DCC9", "#E0D0BA", "#D4BBA4", "#C3937F", "#B23A2E"]
+  )).domain([0, 1]);
+  // 色阶顶端压到浅色：对数位置再取 2.6 次幂，只有英国这一端会真正变红。
+  function fillFor(c) {
+    if (!c) return "#EBE4D6";
+    var t = Math.pow(tScale(Math.max(1, c.revenue)), 2.6);
+    return ramp(t);
+  }
+  var rScale = d3.scaleSqrt().domain([0, rMax]).range([0, 0]);
+  var maxBubbleR = 58;
+  rScale.range([0, maxBubbleR]);
+
+  var state = { act: 1, open: false };
+  var cur = { w: 0, h: 0 };
+
+  function vizSize() {
+    var box = document.getElementById("viz").getBoundingClientRect();
+    return { w: Math.max(320, box.width), h: Math.max(360, box.height) };
+  }
+
+  function drawBase() {
+    var s = vizSize(); W = s.w; H = s.h;
+    svg.attr("viewBox", "0 0 " + W + " " + H);
+    proj.fitExtent([[56, 96], [W - 56, H - 118]], fc);
+    maxBubbleR = Math.max(26, Math.min(48, Math.min(W, H) * 0.058));
+    rScale.range([0, maxBubbleR]);
+
+    gCtx.selectAll("path").data(ctx.features).join("path")
+      .attr("class", "ctx").attr("d", geoPath);
+
+    var paths = gCountries.selectAll("path.cpath").data(dataFeatures, function (f) { return f.properties.iso; });
+    paths.join("path")
+      .attr("class", "cpath")
+      .attr("d", geoPath)
+      .call(bindMouse);
+  }
+
+  var bubbleOrder = dataFeatures.slice().sort(function (a, b) { return b.__c.revenue - a.__c.revenue; });
+  var bubble = gBubbles.selectAll("circle.bub").data(bubbleOrder, function (f) { return f.properties.iso; })
+    .join("circle")
+    .attr("class", "bub")
+    .attr("fill", "#B23A2E")
+    .attr("r", 0)
+    .attr("opacity", 0);
+
+  var blabel = gBubbles.selectAll("text.blabel").data(dataFeatures.slice().sort(function (a, b) {
+    return b.__c.revenue - a.__c.revenue;
+  }).slice(0, 6), function (f) { return f.properties.iso; })
+    .join("text").attr("class", "blabel").attr("opacity", 0);
+
+  var hoverIso = null;
+  function placeBubbles() {
+    dataFeatures.forEach(function (f) {
+      var p = geoPath.centroid(f);
+      f.__x = p[0]; f.__y = p[1];
+    });
+    bubble.attr("cx", function (f) { return f.__x; }).attr("cy", function (f) { return f.__y; });
+    blabel.attr("x", function (f) { return f.__x; })
+      .attr("y", function (f) { return f.__y - rScale(f.__c.revenue) - 8; })
+      .text(function (f) { return f.__c.name_zh; });
+  }
+
+  function applyChoropleth(anim) {
+    var t = anim ? d3.transition().duration(DUR + 200).ease(d3.easeCubicInOut) : d3.transition().duration(0);
+    gCountries.selectAll("path.cpath")
+      .transition(t)
+      .attr("fill", function (f) { return fillFor(f.__c); })
+      .attr("stroke", "#FBF7EF")
+      .attr("stroke-width", 0.8)
+      .attr("opacity", 1);
+    gCtx.transition(t).attr("opacity", 1);
+    gOverlay.selectAll("text.olab").transition(t).attr("opacity", 0);
+    bubble.transition(t).attr("r", 0).attr("opacity", 0);
+    blabel.transition(t).attr("opacity", 0);
+    gRoot.transition(t).attr("transform", null);
+    legendChoropleth();
+  }
+
+  function applyBubbles(anim) {
+    var t = anim ? d3.transition().duration(DUR).ease(d3.easeCubicInOut) : d3.transition().duration(0);
+    gRoot.transition(t).attr("transform", null);
+    gCountries.selectAll("path.cpath")
+      .transition(t)
+      .attr("fill", "#E7DFCF")
+      .attr("stroke", "#FBF7EF")
+      .attr("stroke-width", 0.8)
+      .attr("opacity", 1);
+    gCtx.transition(t).attr("opacity", 1);
+    gOverlay.selectAll("text.olab").transition(t).attr("opacity", 0);
+    bubble.transition(t)
+      .attr("r", function (f) { return f.properties.iso === "GBR" ? rScale(f.__c.revenue) : Math.max(2.2, rScale(f.__c.revenue)); })
+      .attr("opacity", function (f) { return f.properties.iso === "GBR" ? 0.16 : 0.9; })
+      .attr("fill", "#B23A2E")
+      .attr("stroke", function (f) { return f.properties.iso === "GBR" ? "#B23A2E" : "#FBF7EF"; })
+      .attr("stroke-width", function (f) { return f.properties.iso === "GBR" ? 1.1 : 1; });
+    blabel.transition(t).attr("opacity", 1);
+    legendBubbles();
+  }
+
+  function focusIE(anim) {
+    var f = dataFeatures.filter(function (d) { return d.properties.iso === "IRL"; })[0];
+    // 抽屉吃掉右边 360px：把爱尔兰放在可见区的 40% 处，右边正好留给不列颠，
+    // 缩放提到 3 倍，法国/西班牙那一大块米色壳子就滑出画外了。
+    var k = 3.05;
+    var boxW = Math.max(280, W - 360);
+    var tx = boxW * 0.40 - k * f.__x, ty = H * 0.50 - k * f.__y;
+    var t = anim ? d3.transition().duration(DUR + 320).ease(d3.easeCubicInOut) : d3.transition().duration(0);
+    gRoot.transition(t).attr("transform", "translate(" + tx + "," + ty + ") scale(" + k + ")");
+    gCtx.transition(t).attr("opacity", 0.14);
+    gCountries.selectAll("path.cpath")
+      .transition(t)
+      .attr("opacity", function (d) {
+        var iso = d.properties.iso;
+        return iso === "IRL" ? 1 : (iso === "GBR" ? 0.6 : 0.16);
+      })
+      .attr("fill", function (d) { return d.properties.iso === "IRL" ? "#B23A2E" : "#E7DFCF"; })
+      .attr("stroke", "#FBF7EF")
+      .attr("stroke-width", function (d) { return d.properties.iso === "IRL" ? 1.6 : 0.9; });
+    bubble.transition(t).attr("opacity", 0).attr("r", 0);
+    blabel.transition(t).attr("opacity", 0);
+    legendToggle(false);
+
+    // 放大后英国没有名字，读者未必认得出——给一个固定字号的小标注
+    var gbf = dataFeatures.filter(function (d) { return d.properties.iso === "GBR"; })[0];
+    gOverlay.selectAll("text.olab").data([gbf]).join("text")
+      .attr("class", "olab")
+      .attr("x", k * gbf.__x + tx + 26)
+      .attr("y", k * gbf.__y + ty + 52)
+      .attr("text-anchor", "middle")
+      .attr("font-size", 11.5)
+      .attr("letter-spacing", ".08em")
+      .attr("fill", "#6B6257")
+      .attr("opacity", 0)
+      .text("英国")
+      .transition(t).attr("opacity", 0.9);
+  }
+
+  function legendToggle(on) {
+    document.getElementById("legend").classList.toggle("on", !!on);
+  }
+  function legendChoropleth() {
+    legendToggle(true);
+    document.getElementById("legendGrad").hidden = false;
+    document.getElementById("legendSize").hidden = true;
+    document.getElementById("legendLo").textContent = money(rMin);
+    document.getElementById("legendHi").textContent = money(rMax);
+    var stops = [];
+    for (var i = 0; i <= 10; i++) stops.push(ramp(Math.pow(i / 10, 2.6)));
+    document.getElementById("legendBar").style.background =
+      "linear-gradient(90deg," + stops.map(function (c, i) { return c + " " + (i * 10) + "%"; }).join(",") + ")";
+    document.getElementById("legendCap").textContent =
+      "对数位置再压一次，只有英国到达色阶顶端。";
+  }
+  function legendBubbles() {
+    legendToggle(true);
+    document.getElementById("legendGrad").hidden = true;
+    var box = document.getElementById("legendSize");
+    box.hidden = false;
+    var picks = [BY_ISO.GBR, BY_ISO.DEU, BY_ISO.IRL];
+    var R = 10;
+    box.innerHTML = picks.map(function (c) {
+      var r = Math.max(1.4, R * Math.sqrt(c.revenue / rMax));
+      return '<div class="sleg"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">' +
+        '<circle cx="10" cy="10" r="' + r.toFixed(1) + '" fill="#B23A2E" opacity="' +
+        (c.iso === "GBR" ? .2 : .85) + '"/></svg><span>' + c.name_zh + '</span><span class="v">' +
+        money(c.revenue) + '</span></div>';
+    }).join("");
+    document.getElementById("legendCap").textContent = "面积正比于营收；英国的圆是半透明的，免得盖住邻居。";
+  }
+
+  function setVizHead(k, t, foot) {
+    document.getElementById("vizK").textContent = k;
+    document.getElementById("vizT").textContent = t;
+    document.getElementById("vizFoot").textContent = foot;
+  }
+
+  var restEl = document.getElementById("rest");
+  var restRows = document.getElementById("restRows");
+  function buildRest() {
+    var rows = C.filter(function (c) { return c.is_country && !c.on_map; })
+      .sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 5);
+    var outRev = F.revenue * outside;
+    var restRev = outRev - d3.sum(rows, function (c) { return c.revenue; });
+    var segs = rows.map(function (c) { return { n: c.name_zh, v: c.revenue }; });
+    segs.push({ n: "其余 " + (C.length - F.europe_countries - rows.length) + " 项", v: restRev });
+    var COL = ["#B23A2E", "#C4644F", "#D2836C", "#DDA591", "#E6C3B4", "#D2C9B9"];
+    document.getElementById("restShare").textContent = pct(outside, 2);
+    document.getElementById("restStack").innerHTML = segs.map(function (s, i) {
+      return '<i style="flex:' + (s.v / outRev).toFixed(4) + ';background:' + COL[i] + '"></i>';
+    }).join("");
+    restRows.innerHTML = segs.map(function (s, i) {
+      return '<div class="rest__item"><b style="background:' + COL[i] + '"></b><span>' + s.n +
+        '</span><span>' + money(s.v) + '</span></div>';
+    }).join("");
+  }
+
+  function refresh(anim) {
+    drawBase();
+    placeBubbles();
+    if (state.act === 1) applyChoropleth(anim);
+    else if (state.act === 2) applyBubbles(anim);
+    else focusIE(anim);
+    restEl.classList.toggle("on", state.act === 2);
+    drawer.el.classList.toggle("on", state.act === 3);
+    if (state.act === 2) restEl.style.opacity = "";
+    if (state.act === 1) setVizHead("Encoding 01 · Choropleth", "欧洲 22 国 · 按营收涂色", "同一组数据 · 同一块国界");
+    if (state.act === 2) {
+      setVizHead("Encoding 02 · Area", "同一组数据 · 面积正比于营收", "英国缩回一个可比的圆");
+    }
+    if (state.act === 3) {
+      setVizHead("Encoding 03 · Drill", "同一块国界 · 下钻到客户", "爱尔兰 · " + ie.customers + " 个客户");
+    }
+  }
+
+  function setAct(a) {
+    if (a === state.act) return;
+    state.act = a;
+    var anim = true;
+    if (a === 1) applyChoropleth(anim);
+    if (a === 2) { applyBubbles(anim); }
+    if (a === 3) { focusIE(anim); }
+    restEl.classList.toggle("on", a === 2);
+    drawer.el.classList.toggle("on", a === 3);
+    if (a === 1) setVizHead("Encoding 01 · Choropleth", "欧洲 22 国 · 按营收涂色", "同一组数据 · 同一块国界");
+    if (a === 2) setVizHead("Encoding 02 · Area", "同一组数据 · 面积正比于营收", "英国缩回一个可比的圆");
+    if (a === 3) setVizHead("Encoding 03 · Drill", "同一块国界 · 下钻到客户", "爱尔兰 · " + ie.customers + " 个客户");
+  }
+
+  /* 抽屉 */
+  var ie = BY_ISO.IRL;
+  var drawer = { el: document.getElementById("drawer") };
+  var CUST_COL = ["#B23A2E", "#D0836F", "#E0AC98", "#9EA9AE", "#C6C0B2"];
+
+  // 抽屉下半：5 个客户的 24 个月叠加成国家月度总额
+  function drawDxTime() {
+    var host = document.getElementById("dxTime");
+    if (!host) return;
+    var Wd = host.getBoundingClientRect().width || 300;
+    var Hd = 104;
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    var s2 = d3.select(host); s2.selectAll("*").remove();
+    var m = { t: 8, r: 2, b: 22, l: 2 };
+    var iw = Wd - m.l - m.r, ih = Hd - m.t - m.b;
+    var cust = ie.top_customers, tot = ie.monthly, NM = tot.length;
+    var y = d3.scaleLinear().domain([0, d3.max(tot) * 1.05]).range([ih, 0]);
+    var bw = iw / NM;
+    var g = s2.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    for (var i = 0; i < NM; i++) {
+      var bottom = 0;
+      for (var k2 = 0; k2 < cust.length; k2++) {
+        var v = cust[k2].monthly[i];
+        if (!v) continue;
+        g.append("rect")
+          .attr("x", i * bw + 0.5).attr("y", y(bottom + v))
+          .attr("width", Math.max(1, bw - 1)).attr("height", Math.max(0, y(bottom) - y(bottom + v)))
+          .attr("fill", CUST_COL[k2]);
+        bottom += v;
+      }
+    }
+    g.append("path").datum(tot.map(function (v, i2) { return [i2 * bw + bw / 2, y(v)]; }))
+      .attr("fill", "none").attr("stroke", "#1C1A17").attr("stroke-width", 1.1)
+      .attr("opacity", .5).attr("d", d3.line().curve(d3.curveMonotoneX));
+
+    g.append("line").attr("x1", 12 * bw).attr("x2", 12 * bw).attr("y1", -3).attr("y2", ih + 3)
+      .attr("stroke", "#1C1A17").attr("opacity", .15);
+
+    g.append("text").attr("class", "heat__key").attr("x", 0).attr("y", ih + 15).text(mShort(M.months[0]));
+    g.append("text").attr("class", "heat__key").attr("x", iw).attr("y", ih + 15)
+      .attr("text-anchor", "end").text(mShort(M.months[NM - 1]));
+    g.append("text").attr("class", "heat__key").attr("x", 12 * bw + 4).attr("y", 8).text("2011");
+
+    g.append("rect").attr("width", iw).attr("height", ih).attr("fill", "transparent")
+      .style("cursor", "crosshair")
+      .on("mousemove", function (ev) {
+        var mx = d3.pointer(ev, g.node())[0];
+        var i3 = Math.max(0, Math.min(NM - 1, Math.floor(mx / bw)));
+        var parts = cust.map(function (c, k3) {
+          return c.monthly[i3] > 0
+            ? '<span style="color:' + CUST_COL[k3] + '">■</span> #' + c.id + ' ' + money(c.monthly[i3])
+            : null;
+        }).filter(Boolean).join("<br>");
+        showTip(mLabel(M.months[i3]) + " · 该国 " + money(tot[i3]) + (parts ? "<br>" + parts : ""), ev);
+      })
+      .on("mouseleave", hideTip);
+  }
+  (function fillDrawer() {
+    document.getElementById("dxRev").textContent = money(ie.revenue);
+    document.getElementById("dxCust").textContent = n(ie.customers);
+    document.getElementById("dxOrd").textContent = n(ie.orders);
+    document.getElementById("dxPer").textContent = money(ie.revenue_per_customer);
+    document.getElementById("dxSub").textContent =
+      "Ireland · 占全部营收 " + pct(ie.share, 2) + " · 含取消单的发票共 " + n(ie.invoices_all) + " 张";
+    var maxC = d3.max(ie.top_customers, function (c) { return c.revenue; });
+    document.getElementById("dxRows").innerHTML = ie.top_customers.map(function (c, i) {
+      return '<div class="crow"><span class="id"><i style="background:' + CUST_COL[i] + '"></i>#' + c.id + '</span>' +
+        '<span class="bar"><i style="width:' + (c.revenue / maxC * 100).toFixed(1) + '%"></i></span>' +
+        '<span class="v">' + money(c.revenue) + '</span></div>';
+    }).join("");
+    drawDxTime();
+    var act = ie.top_customers.filter(function (c) { return c.active_months >= 20; }).length;
+    document.getElementById("dxFoot").innerHTML =
+      "条形对最大客户取相对值；下面的柱子把这 5 个人按月叠起来，深色细线是该国每月的总额——两幅图是同一笔钱。" +
+      "<br>其中 " + act + " 个客户 24 个月里至少有 20 个月在下单。国家的“热”，是他们的日常。";
+  })();
+
+  /* 交互：悬浮与点击 */
+  function showTip(html, ev) {
+    tipEl.innerHTML = html;
+    tipEl.style.left = ev.clientX + "px";
+    tipEl.style.top = ev.clientY + "px";
+    tipEl.classList.add("on");
+  }
+  function hideTip() { tipEl.classList.remove("on"); }
+
+  function bindMouse(sel) {
+    sel.on("mousemove", function (ev, f) {
+        var c = f.__c; if (!c) return;
+        showTip(c.name_zh + " · " + money(c.revenue) + " · " + pct(c.share, 2), ev);
+      })
+      .on("mouseleave", hideTip)
+      .on("click", function (ev, f) {
+        if (f.properties.iso === "IRL" && state.act !== 3) {
+          document.getElementById("act3").scrollIntoView({ behavior: REDUCE ? "auto" : "smooth", block: "center" });
+        }
+      });
+  }
+  function bindHover() {
+    bubble
+      .on("mousemove", function (ev, f) {
+        showTip(f.__c.name_zh + " · " + money(f.__c.revenue) + " · " + pct(f.__c.share, 2), ev);
+      })
+      .on("mouseleave", hideTip);
+  }
+
+  /* ---------------- 滚动分幕 ---------------- */
+  var steps = Array.prototype.slice.call(document.querySelectorAll(".step"));
+  function onStep() {
+    // 用「哪一幕的文字块顶边已经越过视口 62%」判断，而不是「谁的中心最近」：
+    // 后者会让右栏已经讲到第 2 幕、左栏地图还停在第 1 幕。
+    var y = window.innerHeight * 0.62;
+    var best = 1;
+    steps.forEach(function (s) {
+      var probe = s.querySelector(".step__inner") || s;
+      if (probe.getBoundingClientRect().top <= y) best = +s.dataset.act;
+    });
+    var storyBox = document.getElementById("story").getBoundingClientRect();
+    if (storyBox.bottom < 80 || storyBox.top > window.innerHeight - 80) {
+      // 离开第 1-3 幕，锁定最后一次状态，避免逆向滚动时闪回
+    }
+    setAct(best);
+  }
+
+  var markSecs = [
+    { id: "act1", t: "02 / 06" }, { id: "act2", t: "03 / 06" }, { id: "act3", t: "04 / 06" },
+    { id: "act4", t: "05 / 06" }, { id: "act5", t: "06 / 06" }, { id: "act55", t: "05.5 / 06" }
+  ];
+  function syncMark() {
+    var y = window.innerHeight * 0.34, cur = null;
+    markSecs.forEach(function (s) {
+      var el = document.getElementById(s.id);
+      if (el && el.getBoundingClientRect().top <= y) cur = s.t;
+    });
+    actmark.textContent = cur || "01 / 06";
+    actmark.classList.toggle("on", window.scrollY > window.innerHeight * 0.45);
+  }
+  var stepTick = false;
+  window.addEventListener("scroll", function () {
+    if (stepTick) return;
+    stepTick = true;
+    requestAnimationFrame(function () { onStep(); syncMark(); stepTick = false; });
+  }, { passive: true });
+
+  /* ---------------- 第 4 幕 折线 ---------------- */
+  var lineDrawn = false;
+  function drawLine() {
+    var host = document.getElementById("lineChart");
+    var Wd = host.parentNode.getBoundingClientRect().width;
+    var Hd = Math.max(300, Math.min(460, Wd * 0.4));
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var m = { t: 54, r: 26, b: 42, l: 58 };
+    var iw = Wd - m.l - m.r, ih = Hd - m.t - m.b;
+    var s = d3.select(host);
+    s.selectAll("*").remove();
+
+    var x = d3.scalePoint().domain(M.months).range([0, iw]).padding(0.5);
+    var yMax = d3.max(M.revenue) * 1.12;
+    var y = d3.scaleLinear().domain([0, yMax]).range([ih, 0]);
+
+    var g = s.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    var ticks = [0, 0.5e6, 1e6, 1.5e6].filter(function (v) { return v <= yMax; });
+    g.append("g").attr("class", "axis").call(d3.axisLeft(y).tickValues(ticks)
+      .tickFormat(function (v) { return v === 0 ? "£0" : "£" + (v / 1e6).toFixed(1) + "M"; }).tickSize(-iw));
+    var xTicks = [0, 4, 8, 12, 16, 20, 23];
+    g.append("g").attr("class", "axis").attr("transform", "translate(0," + ih + ")")
+      .call(d3.axisBottom(x).tickValues(xTicks.map(function (i) { return M.months[i]; }))
+        .tickFormat(mShort).tickSize(0)).call(function (sel) { sel.select(".domain").remove(); });
+
+    var area = d3.area().x(function (d, i) { return x(M.months[i]); })
+      .y0(ih).y1(function (d) { return y(d); }).curve(d3.curveMonotoneX);
+    var grad = s.append("defs").append("linearGradient").attr("id", "lg").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 1);
+    grad.append("stop").attr("offset", "0%").attr("stop-color", "#B23A2E").attr("stop-opacity", .16);
+    grad.append("stop").attr("offset", "100%").attr("stop-color", "#B23A2E").attr("stop-opacity", 0);
+    g.append("path").datum(M.revenue).attr("fill", "url(#lg)").attr("d", area);
+
+    var line = d3.line().x(function (d, i) { return x(M.months[i]); }).y(function (d) { return y(d); }).curve(d3.curveMonotoneX);
+    var path = g.append("path").datum(M.revenue).attr("fill", "none")
+      .attr("stroke", "#B23A2E").attr("stroke-width", 2).attr("d", line);
+
+    var dots = g.append("g").selectAll("circle").data(M.revenue).join("circle")
+      .attr("cx", function (d, i) { return x(M.months[i]); })
+      .attr("cy", function (d) { return y(d); })
+      .attr("r", 2.6).attr("fill", "#F6F2EA").attr("stroke", "#B23A2E").attr("stroke-width", 1.2);
+
+    // 基线
+    g.append("line").attr("x1", 0).attr("x2", iw)
+      .attr("y1", y(M.mean)).attr("y2", y(M.mean))
+      .attr("stroke", "#2F4858").attr("stroke-width", 1).attr("stroke-dasharray", "3 4").attr("opacity", .55);
+    g.append("text").attr("class", "ann ann--muted").attr("x", iw).attr("y", y(M.mean) - 8)
+      .attr("text-anchor", "end").text("月均 " + money(M.mean));
+
+    // 峰谷
+    function annotate(month, val, dy, anchor) {
+      var i = M.months.indexOf(month), cx = x(month), cy = y(val);
+      g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 4).attr("fill", "#B23A2E");
+      g.append("line").attr("x1", cx).attr("x2", cx).attr("y1", cy).attr("y2", cy + dy * 0.7)
+        .attr("stroke", "#1C1A17").attr("stroke-width", .8).attr("opacity", .35);
+      var t = g.append("text").attr("class", "ann").attr("x", cx).attr("y", cy + dy)
+        .attr("text-anchor", anchor);
+      t.append("tspan").attr("x", cx).text(mLabel(month));
+      t.append("tspan").attr("x", cx).attr("dy", "1.35em").text(money(val));
+    }
+    annotate(M.peak.month, M.peak.revenue, -24, "end");
+    annotate(M.trough.month, M.trough.revenue, 36, "end");
+
+    // 振幅括号
+    var pi = M.months.indexOf(M.peak.month), ti = M.months.indexOf(M.trough.month);
+    var bx = iw - 2;
+    g.append("line").attr("x1", bx).attr("x2", bx).attr("y1", y(M.peak.revenue)).attr("y2", y(M.trough.revenue))
+      .attr("stroke", "#2F4858").attr("stroke-width", 1).attr("opacity", .45);
+    g.append("text").attr("class", "ann").attr("x", bx - 8)
+      .attr("y", (y(M.peak.revenue) + y(M.trough.revenue)) / 2)
+      .attr("text-anchor", "end").attr("fill", "#2F4858").text(M.amplitude.toFixed(2) + "×");
+
+    // 绘制动画
+    if (!REDUCE) {
+      var len = path.node().getTotalLength();
+      path.attr("stroke-dasharray", len + " " + len).attr("stroke-dashoffset", len)
+        .transition().duration(1600).ease(d3.easeCubicOut).attr("stroke-dashoffset", 0)
+        .on("end", function () { path.attr("stroke-dasharray", null); });
+      dots.attr("opacity", 0).transition().delay(function (d, i) { return 120 + i * 40; }).duration(260).attr("opacity", 1);
+    }
+
+    // 悬停
+    var guide = g.append("line").attr("y1", 0).attr("y2", ih).attr("stroke", "#1C1A17")
+      .attr("stroke-width", .7).attr("opacity", 0);
+    var hit = g.append("rect").attr("width", iw).attr("height", ih).attr("fill", "transparent")
+      .style("cursor", "crosshair");
+    hit.on("mousemove", function (ev) {
+      var mx = d3.pointer(ev, g.node())[0];
+      var i = Math.max(0, Math.min(M.months.length - 1, Math.round((mx / iw) * (M.months.length - 1))));
+      guide.attr("x1", x(M.months[i])).attr("x2", x(M.months[i])).attr("opacity", .25);
+      showTip(mLabel(M.months[i]) + " · " + money(M.revenue[i]) + " · " + n(M.orders[i]) + " 张发票", ev);
+    }).on("mouseleave", function () { guide.attr("opacity", 0); hideTip(); });
+  }
+
+  /* ---------------- 第 4 幕 热力图：自身基线 ---------------- */
+  function heatColor(idx) {
+    var t = (idx - 100) / 80;
+    return t <= 0
+      ? d3.interpolateRgb("#EFE7D8", "#2F4858")(Math.min(1, -t))
+      : d3.interpolateRgb("#EFE7D8", "#B23A2E")(Math.min(1, t));
+  }
+  function peakInfo(c) {
+    var i = d3.maxIndex(c.monthly);
+    return { i: i, ratio: c.monthly[i] / (d3.mean(c.monthly) || 1) };
+  }
+  function drawHeat() {
+    var host = document.getElementById("heat");
+    if (!host) return;
+    var Wd = host.parentNode.getBoundingClientRect().width;
+    var rows = C.slice(0, 12).map(function (c) { return { c: c, p: peakInfo(c) }; })
+      .sort(function (a, b) { return a.p.ratio - b.p.ratio; });
+    var NM = M.months.length;
+    var labW = Wd < 900 ? 84 : 108;
+    var ratW = 58;
+    var cellH = 22, gap = 2, top = 30, bottom = 30;
+    var cw = (Wd - labW - ratW - 14) / NM;
+    var Hd = top + rows.length * (cellH + gap) + bottom;
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var s = d3.select(host); s.selectAll("*").remove();
+
+    var gx = s.append("g").attr("transform", "translate(" + labW + "," + (top - 11) + ")");
+    for (var i = 0; i < NM; i += 3) {
+      gx.append("text").attr("class", "heat__key").attr("x", i * cw + cw / 2)
+        .attr("text-anchor", "middle").text(mShort(M.months[i]));
+    }
+    gx.append("line").attr("x1", 12 * cw).attr("x2", 12 * cw).attr("y1", -4)
+      .attr("y2", rows.length * (cellH + gap) + 6).attr("stroke", "#1C1A17").attr("opacity", .13);
+    s.append("text").attr("class", "heat__key")
+      .attr("x", labW + NM * cw + 14).attr("y", top - 11)
+      .text("峰 / 均值");
+
+    rows.forEach(function (o, r) {
+      var c = o.c;
+      var mean = d3.mean(c.monthly) || 1;
+      var gy = s.append("g").attr("transform", "translate(0," + (top + r * (cellH + gap)) + ")");
+      gy.append("text").attr("class", "heat__lab").attr("x", 0).attr("y", cellH / 2 + 4).text(c.name_zh);
+      gy.append("text").attr("class", "heat__key").attr("x", labW - 14).attr("y", cellH / 2 + 4)
+        .attr("text-anchor", "end").text(pct(c.share, 2));
+      gy.append("text").attr("x", labW + NM * cw + 14).attr("y", cellH / 2 + 4)
+        .attr("font-size", 11).attr("fill", "#2A251F").attr("font-variant-numeric", "tabular-nums")
+        .text("×" + o.p.ratio.toFixed(1));
+      c.monthly.forEach(function (v, i2) {
+        var idx = v / mean * 100;
+        gy.append("rect")
+          .attr("x", labW + i2 * cw + 0.8).attr("y", 0)
+          .attr("width", Math.max(1, cw - 1.6)).attr("height", cellH)
+          .attr("rx", 1.5).attr("fill", heatColor(idx))
+          .attr("opacity", v === 0 ? 0.4 : 1)
+          .style("cursor", "crosshair")
+          .on("mousemove", function (ev) {
+            showTip(c.name_zh + " · " + mLabel(M.months[i2]) + " · " + money(v) +
+              "<br>自身 24 月均值 " + money(mean) + " · 这一格 " + Math.round(idx) + "%", ev);
+          })
+          .on("mouseleave", hideTip);
+      });
+    });
+
+    var ky = top + rows.length * (cellH + gap) + 16;
+    s.append("text").attr("class", "heat__key").attr("x", labW).attr("y", ky)
+      .text("每格 = 该国当月营收 ÷ 它自己 24 个月的均值。偏红＝高于自身基线，偏蓝＝低于；" +
+            "右侧 = 最亮的那一格是自身均值的几倍。");
+  }
+
+  /* ---------------- 第 5 幕 三张失败图 ---------------- */
+  function drawFailAbs() {
+    var host = document.getElementById("failAbs");
+    var Wd = host.parentNode.getBoundingClientRect().width - 4;
+    var Hd = 210;
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var s = d3.select(host); s.selectAll("*").remove();
+    var rows = C.slice(0, 7);
+    var y = d3.scaleBand().domain(rows.map(function (d) { return d.name; })).range([4, Hd - 4]).padding(0.28);
+    var x = d3.scaleLinear().domain([0, rMax]).range([0, Wd - 152]);
+    var g = s.append("g");
+    g.selectAll("rect.bg").data(rows).join("rect")
+      .attr("x", Wd - 152).attr("y", function (d) { return y(d.name); })
+      .attr("width", 152).attr("height", y.bandwidth()).attr("fill", "none");
+    g.selectAll("text.nm").data(rows).join("text").attr("class", "glabel")
+      .attr("x", Wd - 148).attr("y", function (d) { return y(d.name) + y.bandwidth() / 2 + 3.5; })
+      .text(function (d) { return d.name_zh; });
+    // 每行的份额：让「第 1 名 85%，其余挤成一条缝」变成一个能读的数字，而不是只有长度
+    g.selectAll("text.pc").data(rows).join("text")
+      .attr("x", Wd).attr("y", function (d) { return y(d.name) + y.bandwidth() / 2 + 3.5; })
+      .attr("text-anchor", "end").attr("font-size", 11)
+      .attr("fill", function (d, i) { return i === 0 ? "#B23A2E" : "#6B6257"; })
+      .attr("font-variant-numeric", "tabular-nums")
+      .text(function (d) { return pct(d.share, 1); });
+    g.selectAll("rect.bar").data(rows).join("rect")
+      .attr("x", 0).attr("y", function (d) { return y(d.name); })
+      .attr("height", y.bandwidth()).attr("fill", function (d, i) { return i === 0 ? "#B23A2E" : "#C9B9A6"; })
+      .attr("width", 0)
+      .transition().duration(REDUCE ? 0 : 900).delay(function (d, i) { return i * 70; })
+      .attr("width", function (d) { return Math.max(1.2, x(d.revenue)); });
+  }
+
+  function drawFailArea() {
+    var host = document.getElementById("failArea");
+    var Wd = host.parentNode.getBoundingClientRect().width - 4;
+    var Hd = 210;
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var s = d3.select(host); s.selectAll("*").remove();
+
+    // 只框住西欧—中欧。不裁的话北欧加冰岛会把整块大陆压回近乎正方形，
+    // 卡片里就只剩一张邮票，而故事里的三个主角全在 56°N 以南。
+    var WEST = -15, EAST = 40, SOUTH = 35, NORTH = 56.5;
+    var p = d3.geoConicConformal().parallels([35, 65]).rotate([-10, 0]);
+    var gp = d3.geoPath(p);
+    p.fitExtent([[0, 0], [Wd, Hd]], {
+      type: "Polygon",
+      coordinates: [[[WEST, SOUTH], [WEST, NORTH], [EAST, NORTH], [EAST, SOUTH], [WEST, SOUTH]]]
+    });
+    function inFrame(f) {
+      var c = d3.geoCentroid(f);
+      return c[0] >= WEST && c[0] <= EAST && c[1] >= SOUTH && c[1] <= NORTH;
+    }
+
+    // 面积占比永远按完整的 22 国算，和画哪一块地无关
+    var all = fc.features.map(function (f) { return { f: f, a: d3.geoArea(f), c: f.__c }; });
+    var aSum = d3.sum(all, function (d) { return d.a; });
+    var aMax = d3.max(all, function (d) { return d.a; });
+    var areas = all.filter(function (d) { return inFrame(d.f); });
+    var sc = d3.scaleSequential(d3.interpolateRgbBasis(["#EFE7D8", "#DCC9B2", "#C99680", "#B23A2E"])).domain([0, aMax]);
+
+    s.append("g").selectAll("path").data(ctx.features.filter(inFrame)).join("path")
+      .attr("d", gp).attr("fill", "#EBE4D6").attr("stroke", "#FBF7EF").attr("stroke-width", .4);
+    s.append("g").selectAll("path").data(areas).join("path")
+      .attr("d", function (d) { return gp(d.f); })
+      .attr("fill", function (d) { return sc(d.a); })
+      .attr("stroke", "#FBF7EF").attr("stroke-width", .5);
+
+    // 两个被面积吞掉的主角
+    [["IRL", -1], ["CHE", 1]].forEach(function (pair) {
+      var d = areas.filter(function (x) { return x.f.properties.iso === pair[0]; })[0];
+      if (!d) return;
+      var c = gp.centroid(d.f), dir = pair[1];
+      var gg = s.append("g");
+      gg.append("circle").attr("cx", c[0]).attr("cy", c[1]).attr("r", 6)
+        .attr("fill", "none").attr("stroke", "#2F4858").attr("stroke-width", 1.2);
+      gg.append("line").attr("x1", c[0] + dir * 6).attr("y1", c[1] - 1)
+        .attr("x2", c[0] + dir * 17).attr("y2", c[1] - 13)
+        .attr("stroke", "#2F4858").attr("stroke-width", .8).attr("opacity", .55);
+      gg.append("text").attr("class", "glabel").attr("x", c[0] + dir * 19).attr("y", c[1] - 15)
+        .attr("text-anchor", dir > 0 ? "start" : "end")
+        .attr("style", "paint-order:stroke;stroke:#F6F2EA;stroke-width:2.8px;stroke-linejoin:round")
+        .text(d.c.name_zh + " " + pct(d.a / aSum, 1));
+    });
+
+    var fra = all.filter(function (d) { return d.f.properties.iso === "FRA"; })[0];
+    var ieA = all.filter(function (d) { return d.f.properties.iso === "IRL"; })[0];
+    document.getElementById("failAreaCap").textContent =
+      "法国的国土面积是爱尔兰的 " + (fra.a / ieA.a).toFixed(1) + " 倍；可爱尔兰的营收是法国的 " +
+      (ie.revenue / fra.c.revenue).toFixed(1) + " 倍。地图按面积分像素，爱尔兰就只剩一条缝。";
+  }
+
+  function maxSwing(c) {
+    var best = 0, at = null, av = null, bv = null, ai = null;
+    for (var i = 1; i < c.monthly.length; i++) {
+      var a = c.monthly[i - 1], b = c.monthly[i];
+      if (a > 0 && b > 0) {
+        var d = Math.abs(b / a - 1);
+        if (d > best) { best = d; at = M.months[i]; ai = M.months[i - 1]; av = a; bv = b; }
+      }
+    }
+    return { v: best, i: at, prevMonth: ai, a: av, b: bv };
+  }
+
+  function drawFailDelta() {
+    var host = document.getElementById("failDelta");
+    var Wd = host.parentNode.getBoundingClientRect().width - 4;
+    var Hd = 210;
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var s = d3.select(host); s.selectAll("*").remove();
+    var pool = C.filter(function (c) {
+      return c.customers > 0 && c.customers <= 40 && c.revenue > 60000 && c.is_country;
+    }).map(function (c) { var m = maxSwing(c); c.__sw = m; return c; })
+      .sort(function (a, b) { return b.__sw.v - a.__sw.v; }).slice(0, 3);
+    if (!pool.length) return;
+    var maxV = d3.max(pool, function (c) { return c.__sw.v; });
+    var rowH = Hd / pool.length;
+    pool.forEach(function (c, idx) {
+      var g = s.append("g").attr("transform", "translate(0," + (idx * rowH) + ")");
+      g.append("text").attr("class", "glabel").attr("x", 0).attr("y", 11)
+        .text(c.name_zh + " · " + c.customers + " 个客户");
+      var ratio = 1 + c.__sw.v;
+      g.append("text").attr("class", "ann").attr("x", Wd).attr("y", 11).attr("text-anchor", "end")
+        .attr("fill", "#B23A2E")
+        .text(ratio >= 4 ? "单月 ×" + Math.round(ratio) : "单月 +" + Math.round(c.__sw.v * 100) + "%");
+      var mx = d3.scalePoint().domain(M.months).range([0, Wd]).padding(0.5);
+      var my = d3.scaleLinear().domain([0, d3.max(c.monthly)]).range([rowH - 12, 20]);
+      var ln = d3.line().x(function (d, i) { return mx(M.months[i]); }).y(function (d) { return my(d); }).curve(d3.curveMonotoneX);
+      g.append("path").datum(c.monthly).attr("fill", "none")
+        .attr("stroke", "#2F4858").attr("stroke-width", 1).attr("opacity", .75).attr("d", ln);
+    });
+    var top = pool[0];
+    document.getElementById("failDeltaCap").textContent =
+      top.name_zh + "有 " + top.customers + " 个客户：" + mLabel(top.__sw.prevMonth) + " 到 " +
+      mLabel(top.__sw.i) + "，一个月里从 " + money(top.__sw.a) + " 变成 " + money(top.__sw.b) +
+      "。这不是增长，是一个客户的一次下单。";
+  }
+
+  /* ---------------- 换一个问题：自身基线 ---------------- */
+  function drawBaseline() {
+    var host = document.getElementById("baseChart");
+    var Wd = host.parentNode.getBoundingClientRect().width;
+    var Hd = Math.max(260, Math.min(340, Wd * 0.28));
+    host.setAttribute("viewBox", "0 0 " + Wd + " " + Hd);
+    host.setAttribute("height", Hd);
+    var s = d3.select(host); s.selectAll("*").remove();
+    var m = { t: 40, r: 24, b: 34, l: 66 };
+    var iw = Wd - m.l - m.r, ih = Hd - m.t - m.b;
+    var g = s.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+    var vals = ie.monthly;
+    var mean = d3.mean(vals);
+    var sd = d3.deviation(vals) || 0;
+    var x = d3.scalePoint().domain(M.months).range([0, iw]).padding(0.42);
+    var y = d3.scaleLinear().domain([0, d3.max(vals) * 1.14]).range([ih, 0]);
+    var bw = Math.max(4, iw / M.months.length * 0.62);
+
+    g.append("rect").attr("x", 0).attr("width", iw)
+      .attr("y", y(mean + sd)).attr("height", Math.max(1, y(mean - sd) - y(mean + sd)))
+      .attr("fill", "#2F4858").attr("opacity", .07);
+    g.append("line").attr("x1", 0).attr("x2", iw).attr("y1", y(mean)).attr("y2", y(mean))
+      .attr("stroke", "#2F4858").attr("stroke-width", 1).attr("stroke-dasharray", "3 4").attr("opacity", .7);
+    g.append("text").attr("class", "ann").attr("x", 2).attr("y", y(mean) - 7)
+      .attr("style", "paint-order:stroke;stroke:#F6F2EA;stroke-width:3px;stroke-linejoin:round")
+      .attr("fill", "#2F4858").text("自身基线 " + money(mean));
+
+    var below = vals.filter(function (v) { return v < mean; }).length;
+    g.selectAll("rect.mb").data(vals).join("rect")
+      .attr("x", function (d, i) { return x(M.months[i]) - bw / 2; })
+      .attr("width", bw).attr("y", ih).attr("height", 0)
+      .attr("fill", function (d) { return d < mean ? "#C9B9A6" : "#B23A2E"; })
+      .attr("opacity", .9)
+      .transition().duration(REDUCE ? 0 : 700).delay(function (d, i) { return i * 18; })
+      .attr("y", function (d) { return y(d); })
+      .attr("height", function (d) { return ih - y(d); });
+
+    g.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(4)
+      .tickFormat(function (v) { return v === 0 ? "£0" : "£" + Math.round(v / 1000) + "k"; }).tickSize(-iw));
+    g.append("g").attr("class", "axis").attr("transform", "translate(0," + ih + ")")
+      .call(d3.axisBottom(x).tickValues([0, 4, 8, 12, 16, 20, 23].map(function (i) { return M.months[i]; }))
+        .tickFormat(mShort).tickSize(0)).call(function (sel) { sel.select(".domain").remove(); });
+
+    document.getElementById("turnNote").innerHTML =
+      M.months.length + " 个月里，爱尔兰有 <b>" + below + " 个月</b>低于自己的基线、<b>" +
+      (M.months.length - below) + " 个月</b>高于基线。" +
+      "只看“这个月涨了多少”没有意义——先问它相对谁涨。条形高度是当月营收，虚线是它自己的月均；" +
+      "右侧标注那一栏是置信度：5 个客户、平均 " + Math.round(ie.orders / ie.customers) + " 张发票，任何单月结论都只值一行脚注。" +
+      "再往下一层，就是这 5 个客户本身。";
+    return { mean: mean, sd: sd, below: below };
+  }
+
+  /* ---------------- 5.5 ---------------- */
+  (function honest() {
+    var items = [
+      { lab: "取消单金额", p: F.cancel_value_share, v: money(F.cancel_value),
+        s: pct(F.cancel_value_share, 2) + " · " + n(F.cancel_rows) + " 行" },
+      { lab: "负数量行（退货）", p: F.return_rows / F.rows, v: n(F.return_rows) + " 行",
+        s: pct(F.return_rows / F.rows, 2) + " · 占全部行" },
+      { lab: "没有 Customer ID", p: F.anon_row_share, v: n(F.anon_rows) + " 行",
+        s: pct(F.anon_row_share, 2) + " · 销售额 " + pct(F.anon_revenue_share, 1) },
+      { lab: "后 " + F.tail_count + " 个取值", p: F.tail_share, v: money(F.tail_revenue),
+        s: pct(F.tail_share, 2) + " · 另有 " + money(F.non_country_revenue) }
+    ];
+    document.getElementById("honest").innerHTML = items.map(function (it) {
+      return '<div class="honest__row">' +
+        '<div class="honest__lab">' + it.lab + '</div>' +
+        '<div class="honest__track"><i style="width:' + (it.p * 100).toFixed(2) + '%"></i></div>' +
+        '<div class="honest__val"><b>' + it.v + '</b>' + it.s + '</div>' +
+      '</div>';
+    }).join("");
+    document.getElementById("honestNote").textContent =
+      "任何“每客户”指标的分母只含可识别客户；按国家涂色的地图只覆盖欧洲 " + F.europe_countries +
+      " 国，其余 " + (C.length - F.europe_countries) + " 个取值只在“世界其余”里出现。" +
+      "带金额的退货都以取消单形式出现，所以“退货”和“取消”在金额上不重复计。" +
+      "2011 年 12 月只有 9 天，计入总额但不进月度曲线。";
+  })();
+
+  /* ---------------- 首屏数据纹理：738 天，一天一根 ---------------- */
+  function drawGrain() {
+    var P = D.daily;
+    if (!P || !P.values || !P.values.length) return;
+    var svg = d3.select("#grainSvg");
+    var W = svg.node().getBoundingClientRect().width || 1180;
+    var H = 24;
+    svg.attr("viewBox", "0 0 " + W + " " + H).attr("preserveAspectRatio", "none");
+    var n = P.values.length;
+    var step = W / n;
+    var y = d3.scaleSqrt().domain([0, d3.max(P.values) || 1]).range([0, H]);
+    var b = svg.selectAll("rect.bar").data(P.values);
+    b.join(
+      function (enter) {
+        return enter.append("rect").attr("class", "bar")
+          .attr("fill", "#B23A2E").attr("opacity", 0.5);
+      },
+      function (upd) { return upd; },
+      function (exit) { return exit.remove(); }
+    )
+      .attr("x", function (d, i) { return i * step; })
+      .attr("width", Math.max(0.5, step - 0.45))
+      .attr("y", function (d) { return H - Math.max(0, y(d)); })
+      .attr("height", function (d) { return Math.max(0, y(d)); });
+
+    document.getElementById("grainCap").textContent =
+      P.days + " 天，一天一根；空白是没有开单的日子（" + P.zero_days +
+      " 天）。最高的一天 " + money(P.max) + "，最低的非零日 " + money(Math.min.apply(null, P.values.filter(function (x) { return x > 0; }))) + "。";
+  }
+
+  /* ---------------- 首屏与事件 ---------------- */
+  function boot() {
+    buildRest();
+    bindHover();
+    refresh(false);
+    onStep();
+    drawLine();
+    drawGrain();
+    drawHeat();
+    drawFailAbs();
+    drawFailArea();
+    drawFailDelta();
+    drawBaseline();
+  }
+
+  // 第 4 幕数字
+  document.getElementById("a4peakM").textContent = mLabel(M.peak.month);
+  document.getElementById("a4months").textContent = M.months.length;
+  var tm = document.getElementById("turnMonths"); if (tm) tm.textContent = M.months.length;
+  document.getElementById("a4troughM").textContent = mLabel(M.trough.month);
+  document.getElementById("a4amp").textContent = M.amplitude.toFixed(2) + " 倍";
+  document.getElementById("a4note").innerHTML =
+    "峰 " + money(M.peak.revenue) + "（" + mLabel(M.peak.month) + "），谷 " + money(M.trough.revenue) + "（" +
+    mLabel(M.trough.month) + "）。同一段时间里，除英国外最大的国家也只占 " + pct(BY_ISO.IRL.share, 2) +
+    "——时间上的起落，和空间上的差距，不是一个量级。";
+
+  (function heatNote() {
+    var rows = C.slice(0, 12);
+    var gbp = peakInfo(BY_ISO.GBR);
+    var worst = rows.map(function (c) { return { c: c, p: peakInfo(c) }; })
+      .sort(function (a, b) { return b.p.ratio - a.p.ratio; })[0];
+    var el = document.getElementById("heatNote");
+    if (!el) return;
+    var gbt = d3.minIndex(BY_ISO.GBR.monthly);
+    el.innerHTML = "英国：峰在 " + mLabel(M.months[gbp.i]) + "，是自身均值的 " + gbp.ratio.toFixed(1) +
+      " 倍；谷在 " + mLabel(M.months[gbt]) + "。而" + worst.c.name_zh + "最亮的那一格在 " +
+      mLabel(M.months[worst.p.i]) + "，是它自身均值的 " + worst.p.ratio.toFixed(1) +
+      " 倍——那不是季节，是一个月里的一张单。左右两列对照着看：份额越小，倍数越大；" +
+      "只有英国例外——它的 " + gbp.ratio.toFixed(1) + " 倍是季节，别人的 " + worst.p.ratio.toFixed(1) + " 倍是一个订单。";
+  })();
+
+  var lastW = 0;
+  window.addEventListener("resize", function () {
+    if (Math.abs(window.innerWidth - lastW) < 2) return;
+    lastW = window.innerWidth;
+    clearTimeout(window.__rt);
+    window.__rt = setTimeout(function () {
+      refresh(false);
+      drawLine(); drawGrain(); drawHeat(); drawDxTime(); drawFailAbs(); drawFailArea(); drawFailDelta(); drawBaseline();
+    }, 160);
+  });
+
+  boot();
+
+  // 自检：把六个关键数字的实际渲染值暴露给控制台
+  window.__CHECK__ = function () {
+    return [].slice.call(document.querySelectorAll("[data-fact]")).map(function (el) {
+      return { key: el.getAttribute("data-fact"), text: el.textContent.trim() };
+    });
+  };
+})();
+</script>
+</body>
+</html>
